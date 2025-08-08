@@ -1,6 +1,6 @@
 {
 	"name": "A3 Checker",
-	"description": "Made with ❤️‍🔥 By Abu Nayim Faisal",
+	"description": "Assignment 3 automatic code executor and feedback generator. Made with ❤️‍🔥 By Abu Nayim Faisal",
 	"version": "1.0.0",
 	"permissions": [
 		"activeTab",
