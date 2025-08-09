@@ -780,6 +780,7 @@ function runTests() {
 
     console.log("Obtained Marks:", marks);
     console.log("final_marks", final_marks);
+    document.getElementById('marks').value = final_marks
     console.log("Feedbacks:", feedbacks); // Log feedbacks for debugging
   const textArea = document.querySelector(".ql-editor p");
   textArea.innerHTML = `<p>${feedbacks}</p>`;

@@ -891,6 +891,9 @@ const checker = async () => {
   // console.log({feedbacks})
 
  
+  
+    const textArea = document.querySelector(".ql-editor p");
+  textArea.innerHTML = feedbacks;
 
   const markField = document.getElementById("Mark");
   markField.focus();
