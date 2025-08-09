@@ -5,20 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JavaScript Assignment Auto-Tester</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
     <div class="max-w-7xl mx-auto">
         <div class="text-center mb-8">
             <h1 class="text-4xl md:text-6xl font-bold text-white mb-4 animate-pulse-slow">
-                🚀 JavaScript Assignment Auto-Tester
+                🚀 JavaScript Assignment 3 Auto-Tester
             </h1>
             <p class="text-white/80 text-lg md:text-xl">Automated testing system for programming assignments</p>
         </div>
 
-        <div class="font-weight-bold pl-2">60</div>
 
-        <div class="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-6 md:p-8">
+       <div class="grid gap-5">
+
+           <div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl p-6 md:p-8">
+            <h4>Feedbacks and Marks</h4>
+            <div>
+              <div class=".ql-editor" id="editor"></div>
+            </div>
+        </div>
+         <div class="bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl p-6 md:p-8">
             <div class="mb-8">
                 <label for="studentCode" class="block text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     📝 Paste Student's Assignment Code:
@@ -31,6 +40,7 @@
             </div>
             
             <div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+                <input  class="font-weight-bold pl-2" id="submitted_at" type="text" value="60" placeholder="Submitted at" />
                 <button 
                     onclick="runTests()" 
                     class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-full shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2 text-lg">
@@ -45,8 +55,18 @@
             
             <div id="results" class="space-y-6"></div>
         </div>
+
+     
+       </div>
     </div>
 
+    
+
+    <script>
+         const quill = new Quill('#editor', {
+    theme: 'snow'
+  });
+    </script>
  <script src="./script.js"></script>
 </body>
 </html>

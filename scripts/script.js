@@ -560,6 +560,7 @@ async function runTests(code) {
       testConfig.tests
     );
 
+
     const problemPassedCount = testResults.filter(
       (result) => result.passed
     ).length;
@@ -589,7 +590,18 @@ async function runTests(code) {
 async function runSingleProblem(problemKey, code, tests) {
   const results = [];
 
+  // Helper function to remove all spaces and dashes from a string
+  function removeAllSpaces(str) {
+    return String(str).replace(/[\s-]/g, '');
+  }
 
+  // Helper function to normalize output for comparison
+  function normalizeForComparison(value) {
+    if (Array.isArray(value)) {
+      return value.map(item => removeAllSpaces(item));
+    }
+    return removeAllSpaces(value);
+  }
 
   // Collect all test variables
   const testVariables = new Set();
@@ -612,7 +624,6 @@ async function runSingleProblem(problemKey, code, tests) {
     const errorMessage = `Variable(s) not found: [${missingVariables.join(
       ", "
     )}]. Please make sure to use these variable(s) in your code.`;
-
     return tests.map((test) => ({
       passed: false,
       expected: test.expected,
@@ -624,25 +635,30 @@ async function runSingleProblem(problemKey, code, tests) {
 
   // Remove variable declarations from code
   let cleanedCode = removeVariableDeclarations(code, testVariables);
-
   // console.log("Cleaned code:", cleanedCode);
 
   // Run tests using background script communication
   for (const test of tests) {
     try {
       const result = await executeCodeViaBackground(cleanedCode, test);
-
       let passed = false;
       let actualOutput = result.outputs;
 
       if (Array.isArray(test.expected)) {
-        passed = JSON.stringify(actualOutput) === JSON.stringify(test.expected);
+        // Normalize both arrays for comparison
+        const normalizedActual = normalizeForComparison(actualOutput);
+        const normalizedExpected = normalizeForComparison(test.expected);
+        passed = JSON.stringify(normalizedActual) === JSON.stringify(normalizedExpected);
       } else {
         const lastOutput =
           actualOutput.length > 0
             ? actualOutput[actualOutput.length - 1]
             : null;
-        passed = lastOutput == test.expected;
+        
+        // Normalize both values for comparison
+        const normalizedActual = normalizeForComparison(lastOutput || "");
+        const normalizedExpected = normalizeForComparison(test.expected || "");
+        passed = normalizedActual === normalizedExpected;
       }
 
       results.push({
@@ -670,6 +686,7 @@ async function runSingleProblem(problemKey, code, tests) {
 
   return results;
 }
+
 
 function executeCodeInIframe(code, test) {
   return new Promise((resolve, reject) => {
@@ -873,8 +890,7 @@ const checker = async () => {
 
   // console.log({feedbacks})
 
-  const textArea = document.querySelector(".ql-editor p");
-  textArea.innerHTML = feedbacks;
+ 
 
   const markField = document.getElementById("Mark");
   markField.focus();

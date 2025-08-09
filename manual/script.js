@@ -176,23 +176,150 @@ const testCases = {
   },
 };
 
-function extractProblems(code) {
-  const problemPattern =
-    /\/\*+\s*Problem\s*[-\s]*(\d+)[\s\S]*?\*\/\s*([\s\S]*?)(?=\/\*+\s*Problem\s*[-\s]*\d+|$)/gi;
-  const problems = {};
-  let match;
+function extractProblems(source) {
+  // First, let's split the source by problem indicators more effectively
+  const lines = source.split('\n');
+  const problems = [];
+  let currentProblemNumber = null;
+  let currentCodeLines = [];
+  let inCodeBlock = false;
 
-  while ((match = problemPattern.exec(code)) !== null) {
-    const problemNumber = parseInt(match[1]);
-    const problemCode = match[2].trim();
-    problems[`problem${problemNumber}`] = problemCode;
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    const originalLine = line;
+    
+    // Check if this line contains a problem header
+    const problemHeaderRegex = /Problem\s*-?\s*0?(\d+)/i;
+    const match = line.match(problemHeaderRegex);
+    
+    if (match) {
+      // Save the previous problem if it exists
+      if (currentProblemNumber !== null && currentCodeLines.length > 0) {
+        const cleanedCode = cleanCodeBlock(currentCodeLines.join('\n'));
+        if (cleanedCode.trim()) {
+          const problemObj = {};
+          problemObj[`problem${currentProblemNumber}`] = cleanedCode;
+          problems.push(problemObj);
+        }
+      }
+      
+      // Start tracking new problem
+      currentProblemNumber = parseInt(match[1]);
+      currentCodeLines = [];
+      inCodeBlock = true;
+      continue;
+    }
+    
+    // If we're tracking a problem, collect non-comment lines
+    if (inCodeBlock && currentProblemNumber !== null) {
+      // Skip lines that are purely comments or separators
+      const trimmedLine = line.trim();
+      
+      // Skip comment-only lines and separators
+      if (trimmedLine.startsWith('//') || 
+          trimmedLine.startsWith('/*') || 
+          trimmedLine.startsWith('*') ||
+          trimmedLine === '' ||
+          /^\/\*-+.*-+\*\/$/.test(trimmedLine)) {
+        continue;
+      }
+      
+      // Remove inline comments but keep the code
+      line = removeInlineComments(line);
+      
+      // Add non-empty lines
+      if (line.trim()) {
+        currentCodeLines.push(line);
+      }
+    }
   }
-
-  return problems;
+  
+  // Don't forget the last problem
+  if (currentProblemNumber !== null && currentCodeLines.length > 0) {
+    const cleanedCode = cleanCodeBlock(currentCodeLines.join('\n'));
+    if (cleanedCode.trim()) {
+      const problemObj = {};
+      problemObj[`problem${currentProblemNumber}`] = cleanedCode;
+      problems.push(problemObj);
+    }
+  }
+  
+ // Sort by problem number and convert to single object
+  const sortedProblems = problems.sort((a, b) => {
+    const aNum = parseInt(Object.keys(a)[0].replace('problem', ''));
+    const bNum = parseInt(Object.keys(b)[0].replace('problem', ''));
+    return aNum - bNum;
+  });
+  
+  // Merge all problems into a single object
+  const result = {};
+  sortedProblems.forEach(problemObj => {
+    const key = Object.keys(problemObj)[0];
+    result[key] = problemObj[key];
+  });
+  
+  return result;
 }
+
+function removeInlineComments(line) {
+  // Remove inline comments but be careful with strings
+  let result = '';
+  let inString = false;
+  let stringChar = '';
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    
+    // Handle string detection
+    if ((char === '"' || char === "'") && !inString) {
+      inString = true;
+      stringChar = char;
+      result += char;
+    } else if (char === stringChar && inString) {
+      inString = false;
+      stringChar = '';
+      result += char;
+    } else if (inString) {
+      result += char;
+    } else if (char === '/' && nextChar === '/' && !inString) {
+      // Found inline comment, stop here
+      break;
+    } else {
+      result += char;
+    }
+  }
+  
+  return result;
+}
+
+function cleanCodeBlock(code) {
+  return code
+    // Remove multi-line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // Clean up extra whitespace
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
+    .replace(/^\s*\n/, '')
+    .replace(/\n\s*$/, '')
+    .trim();
+}
+
 
 function runSingleProblem(problemKey, code, tests) {
   const results = [];
+
+  // Helper function to remove all spaces from a string
+  function removeAllSpaces(str) {
+    return String(str).replace(/[\s-]/g, '');
+  }
+
+  // Helper function to normalize output for comparison
+  function normalizeForComparison(value) {
+    if (Array.isArray(value)) {
+      return value.map(item => removeAllSpaces(item));
+    }
+    return removeAllSpaces(value);
+  }
 
   // console.log({ problemKey, code, tests });
 
@@ -270,13 +397,20 @@ function runSingleProblem(problemKey, code, tests) {
       let actualOutput = outputs;
 
       if (Array.isArray(test.expected)) {
-        passed = JSON.stringify(actualOutput) === JSON.stringify(test.expected);
+        // Normalize both arrays for comparison
+        const normalizedActual = normalizeForComparison(actualOutput);
+        const normalizedExpected = normalizeForComparison(test.expected);
+        passed = JSON.stringify(normalizedActual) === JSON.stringify(normalizedExpected);
       } else {
         const lastOutput =
           actualOutput.length > 0
             ? actualOutput[actualOutput.length - 1]
             : null;
-        passed = lastOutput == test.expected;
+        
+        // Normalize both values for comparison
+        const normalizedActual = normalizeForComparison(lastOutput || "");
+        const normalizedExpected = normalizeForComparison(test.expected || "");
+        passed = normalizedActual === normalizedExpected;
       }
 
       results.push({
@@ -301,9 +435,6 @@ function runSingleProblem(problemKey, code, tests) {
       });
     }
   }
-
-
-
 
   return results;
 }
@@ -541,10 +672,7 @@ function runTests() {
       const resultDiv = document.createElement("div");
 
       // Generate feedback HTML for the current problem
-      let problemFeedback = `
-        <div class="feedback-problem mb-4">
-          <h4 class="text-lg font-bold">${testConfig.title}</h4>
-      `;
+     let problemFeedback = `<h3 class="text-lg font-bold">${testConfig.title}</h3>  `;
 
       if (!problemCode) {
         resultDiv.className =
@@ -556,10 +684,7 @@ function runTests() {
                             </div>
                             <p class="text-white/90">Problem not found in submission</p>
                         `;
-        problemFeedback += `
-          <p class="text-yellow-600">⚠️ Problem not found in submission</p>
-        </div>
-        `;
+        problemFeedback += `<strong class="text-yellow-600">⚠️ Problem not found in submission</strong><br><br>  `;
         feedbacks += problemFeedback;
         resultsDiv.appendChild(resultDiv);
         continue;
@@ -570,6 +695,8 @@ function runTests() {
         problemCode,
         testConfig.tests
       );
+      
+      // console.log(testResults)
       const problemPassed = testResults.every((result) => result.passed);
       const problemPassedCount = testResults.filter(
         (result) => result.passed
@@ -590,30 +717,19 @@ function runTests() {
       const testDetailsHtml = testResults.map(createTestCaseHTML).join("");
 
       // Append feedback for each test case
-      problemFeedback += `
-        <div class="test-results space-y-2">
-          <p>Test Cases: ${problemPassedCount}/${testConfig.tests.length} passed</p>
-          <ul class="list-disc pl-5">
-      `;
+     problemFeedback += `<b>Test Cases: ${problemPassedCount}/${testConfig.tests.length} passed</b>\n `;
+
       testResults.forEach((result, index) => {
         const status = result.passed ? "✅ Passed" : "❌ Failed";
         const errorInfo = result.passed
           ? ""
-          : `<br>${result.description}<br>Expected: ${JSON.stringify(result.expected) || "N/A"}, Got: ${JSON.stringify(result.actual) || "N/A"}` +
-            (result.error ? `<br>Error: ${result.error}` : "");
-        problemFeedback += `
-          <li>Test ${index + 1}: ${status}${errorInfo}</li>
-        `;
+          : `\n${result.description}\nExpected: ${JSON.stringify(result.expected) || "N/A"}, Got: ${JSON.stringify(result.actual) || "N/A"}` +
+            (result.error ? `\nError: ${result.error}` : "");
+        problemFeedback += `\nTest ${index + 1}: ${status}${errorInfo}\n`;
       });
-      problemFeedback += `
-          </ul>
-              <b>${(acceptanceRate == 100) ?  '🏆 You got full marks for this problem.': ''}</b>
-          <b>${(acceptanceRate > 0 && acceptanceRate != 100) ?  '❌ Not all test case is correct! ✔️ But you got partial marks for correct test cases.': ''}</b>
-          <b>${acceptanceRate === 0 ? '❌😞 No marks!' : ''}</b>
-        </div>
-      </div>
-      `;
-      feedbacks += problemFeedback;
+      problemFeedback += `  \n${acceptanceRate == 100 ?"<b>🏆 You got full marks for this solution.</b>": ""}${acceptanceRate > 0 && acceptanceRate != 100 ? "<b>❌ Not all test cases passed. ✔️ However, you’ve earned marks for the correctly passed test cases.</b>" : "" } ${acceptanceRate === 0 ? "<b>❌😞 No marks!</b>" : ""}  `;
+    feedbacks += problemFeedback;
+    feedbacks += '\n----------------------------------------\n  '
 
       resultDiv.innerHTML = `
                         <div class="flex items-center justify-between mb-4">
@@ -651,24 +767,22 @@ function runTests() {
       resultsDiv.appendChild(resultDiv);
     }
 
-      const submitedNum = document.getElementsByClassName("font-weight-bold pl-2 ")[0]
-    .innerText;
+      const submitedNum = document.getElementById("submitted_at").value;
 
-    feedbacks+= `<br/>
-    <strong>Examiner Feedback:</strong> ${getFeedBack(submitedNum, marks)}
-  
-  <strong>Important Instructions:</strong>
-    → Don't post any marks-related issues on Facebook.
-    → Make sure to read all the feedback carefully.
-    → If you think some mistake happen from the examiner's end, give a recheck request or join support session for help.
-    → After recheck 2 marks will be deducted automatically. but don't worry, if your recheck reason is valid then your marks will be increased.
-    → If your recheck reason is not valid, 2 marks will be deducted from your current marks.
-  <br/>
-  <strong>Let's Code_ Your Career</strong>
-    `
+  feedbacks += `\n<h4 class="font-bold">Examiner Feedback:</h4> ${getFeedBack(submitedNum, marks)}\n
+<strong>Important Instructions:</strong>
+  → Don't post any marks-related issues on Facebook.
+  → Make sure to read all the feedback carefully.
+<br/>
+<strong>Let's Code_ Your Career</strong>`;
+
+ const final_marks = getFinalMark(60, marks, parseInt(submitedNum))
 
     console.log("Obtained Marks:", marks);
+    console.log("final_marks", final_marks);
     console.log("Feedbacks:", feedbacks); // Log feedbacks for debugging
+  const textArea = document.querySelector(".ql-editor p");
+  textArea.innerHTML = `<p>${feedbacks}</p>`;
 
     const summaryDiv = document.createElement("div");
     const percentage =
@@ -712,6 +826,12 @@ function runTests() {
 function clearResults() {
   document.getElementById("results").innerHTML = "";
   document.getElementById("studentCode").value = "";
+}
+
+function getFinalMark(totalMarks, obtainedMarks, submittedAt) {
+  const maxScale = submittedAt;
+  const ratio = maxScale / totalMarks;
+  return Math.ceil(obtainedMarks * ratio);
 }
 
 
