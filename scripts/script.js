@@ -176,133 +176,150 @@ const testCases = {
   },
 };
 
-function extractProblems(code) {
-  const problemPattern =
-    /\/\*+\s*Problem\s*[-\s]*(\d+)[\s\S]*?\*\/\s*([\s\S]*?)(?=\/\*+\s*Problem\s*[-\s]*\d+|$)/gi;
-  const problems = {};
-  let match;
+// function extractProblems(code) {
+//   const problemPattern =
+//     /\/\*+\s*Problem\s*[-\s]*(\d+)[\s\S]*?\*\/\s*([\s\S]*?)(?=\/\*+\s*Problem\s*[-\s]*\d+|$)/gi;
+//   const problems = {};
+//   let match;
 
-  while ((match = problemPattern.exec(code)) !== null) {
-    const problemNumber = parseInt(match[1]);
-    const problemCode = match[2].trim();
-    problems[`problem${problemNumber}`] = problemCode;
-  }
-
-  return problems;
-}
-// function runSingleProblem(problemKey, code, tests) {
-//   const results = [];
-
-//   // console.log({ problemKey, code, tests });
-
-//   // Collect all test variables
-//   const testVariables = new Set();
-//   tests.forEach((test) => {
-//     Object.keys(test.input).forEach((varName) => {
-//       testVariables.add(varName);
-//     });
-//   });
-
-//   // console.log("Required variables from tests:", Array.from(testVariables));
-
-//   // Check if all required variables are used in the code
-//   const missingVariables = [];
-//   const foundVariables = [];
-
-//   testVariables.forEach((varName) => {
-//     const varUsageRegex = new RegExp(`\\b${varName}\\b`, "g");
-//     if (varUsageRegex.test(code)) {
-//       foundVariables.push(varName);
-//     } else {
-//       missingVariables.push(varName);
-//     }
-//   });
-
-//   if (missingVariables.length > 0) {
-//     const errorMessage = `Variable(s) not found: [${missingVariables.join(
-//       ", "
-//     )}]. Please make sure to use these variable(s) in your code.`;
-
-//     return tests.map((test) => ({
-//       passed: false,
-//       expected: test.expected,
-//       actual: "Variable not found error",
-//       description: test.description,
-//       error: errorMessage,
-//     }));
+//   while ((match = problemPattern.exec(code)) !== null) {
+//     const problemNumber = parseInt(match[1]);
+//     const problemCode = match[2].trim();
+//     problems[`problem${problemNumber}`] = problemCode;
 //   }
 
-//   // console.log("Found variables:", foundVariables);
-
-//   // Remove variable declarations from code (handles multiline objects)
-//   let cleanedCode = removeVariableDeclarations(code, testVariables);
-
-//   console.log("Cleaned code:", cleanedCode);
-
-//   // Run tests
-//   for (const test of tests) {
-//     try {
-//       const outputs = [];
-//       const mockConsole = {
-//         log: function (...args) {
-//           outputs.push(args.join(" "));
-//         },
-//       };
-
-//       const executionCode = `
-//                 const console = mockConsole;
-//                 ${Object.entries(test.input)
-//                   .map(
-//                     ([key, value]) => `var ${key} = ${JSON.stringify(value)};`
-//                   )
-//                   .join("\n")}
-//                 ${cleanedCode}
-//             `;
-
-//       console.log("Execution code for test:", test.description);
-//       console.log(executionCode);
-
-//       const func = new Function("mockConsole", executionCode);
-//       func(mockConsole);
-
-//       let passed = false;
-//       let actualOutput = outputs;
-
-//       if (Array.isArray(test.expected)) {
-//         passed = JSON.stringify(actualOutput) === JSON.stringify(test.expected);
-//       } else {
-//         const lastOutput =
-//           actualOutput.length > 0
-//             ? actualOutput[actualOutput.length - 1]
-//             : null;
-//         passed = lastOutput == test.expected;
-//       }
-
-//       results.push({
-//         passed,
-//         expected: test.expected,
-//         actual:
-//           actualOutput.length > 0
-//             ? Array.isArray(test.expected)
-//               ? actualOutput
-//               : actualOutput[actualOutput.length - 1]
-//             : "No output",
-//         description: test.description,
-//         error: null,
-//       });
-//     } catch (error) {
-//       results.push({
-//         passed: false,
-//         expected: test.expected,
-//         actual: null,
-//         description: test.description,
-//         error: error.message,
-//       });
-//     }
-//   }
-
-//   return results;
+//   return problems;
 // }
+
+
+function extractProblems(source) {
+  // First, let's split the source by problem indicators more effectively
+  const lines = source.split('\n');
+  const problems = [];
+  let currentProblemNumber = null;
+  let currentCodeLines = [];
+  let inCodeBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    const originalLine = line;
+    
+    // Check if this line contains a problem header
+    const problemHeaderRegex = /Problem\s*-?\s*0?(\d+)/i;
+    const match = line.match(problemHeaderRegex);
+    
+    if (match) {
+      // Save the previous problem if it exists
+      if (currentProblemNumber !== null && currentCodeLines.length > 0) {
+        const cleanedCode = cleanCodeBlock(currentCodeLines.join('\n'));
+        if (cleanedCode.trim()) {
+          const problemObj = {};
+          problemObj[`problem${currentProblemNumber}`] = cleanedCode;
+          problems.push(problemObj);
+        }
+      }
+      
+      // Start tracking new problem
+      currentProblemNumber = parseInt(match[1]);
+      currentCodeLines = [];
+      inCodeBlock = true;
+      continue;
+    }
+    
+    // If we're tracking a problem, collect non-comment lines
+    if (inCodeBlock && currentProblemNumber !== null) {
+      // Skip lines that are purely comments or separators
+      const trimmedLine = line.trim();
+      
+      // Skip comment-only lines and separators
+      if (trimmedLine.startsWith('//') || 
+          trimmedLine.startsWith('/*') || 
+          trimmedLine.startsWith('*') ||
+          trimmedLine === '' ||
+          /^\/\*-+.*-+\*\/$/.test(trimmedLine)) {
+        continue;
+      }
+      
+      // Remove inline comments but keep the code
+      line = removeInlineComments(line);
+      
+      // Add non-empty lines
+      if (line.trim()) {
+        currentCodeLines.push(line);
+      }
+    }
+  }
+  
+  // Don't forget the last problem
+  if (currentProblemNumber !== null && currentCodeLines.length > 0) {
+    const cleanedCode = cleanCodeBlock(currentCodeLines.join('\n'));
+    if (cleanedCode.trim()) {
+      const problemObj = {};
+      problemObj[`problem${currentProblemNumber}`] = cleanedCode;
+      problems.push(problemObj);
+    }
+  }
+  
+ // Sort by problem number and convert to single object
+  const sortedProblems = problems.sort((a, b) => {
+    const aNum = parseInt(Object.keys(a)[0].replace('problem', ''));
+    const bNum = parseInt(Object.keys(b)[0].replace('problem', ''));
+    return aNum - bNum;
+  });
+  
+  // Merge all problems into a single object
+  const result = {};
+  sortedProblems.forEach(problemObj => {
+    const key = Object.keys(problemObj)[0];
+    result[key] = problemObj[key];
+  });
+  
+  return result;
+}
+
+function removeInlineComments(line) {
+  // Remove inline comments but be careful with strings
+  let result = '';
+  let inString = false;
+  let stringChar = '';
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    
+    // Handle string detection
+    if ((char === '"' || char === "'") && !inString) {
+      inString = true;
+      stringChar = char;
+      result += char;
+    } else if (char === stringChar && inString) {
+      inString = false;
+      stringChar = '';
+      result += char;
+    } else if (inString) {
+      result += char;
+    } else if (char === '/' && nextChar === '/' && !inString) {
+      // Found inline comment, stop here
+      break;
+    } else {
+      result += char;
+    }
+  }
+  
+  return result;
+}
+
+function cleanCodeBlock(code) {
+  return code
+    // Remove multi-line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // Clean up extra whitespace
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
+    .replace(/^\s*\n/, '')
+    .replace(/\n\s*$/, '')
+    .trim();
+}
+
 
 function removeVariableDeclarations(code, variableNames) {
   const lines = code.split("\n");
@@ -510,112 +527,7 @@ function createTestCaseHTML(result) {
                 </div>
             `;
 }
-// function runTests(code) {
-//   console.log({code})
-//   const problems = extractProblems(code);
-//   console.log(problems)
-//   let totalTests = 0;
-//   let passedTests = 0;
-//   let feedbacks = "";
 
-//     let marks = 0;
-
-//     for (const [problemKey, testConfig] of Object.entries(testCases)) {
-//       const problemCode = problems[problemKey];
-
-//       // Generate feedback HTML for the current problem
-//       let problemFeedback = `
-//         <div class="feedback-problem mb-4">
-//           <h4 class="text-lg font-bold">${testConfig.title}</h4>
-//       `;
-
-//       if (!problemCode) {
-//         problemFeedback += `
-//           <p class="text-yellow-600">⚠️ Problem not found in submission</p>
-//         </div>
-//         `;
-//         feedbacks += problemFeedback;
-//         continue;
-//       }
-
-//       const testResults = runSingleProblem(
-//         problemKey,
-//         problemCode,
-//         testConfig.tests
-//       );
-
-//       console.log({testResults})
-
-//       const problemPassedCount = testResults.filter(
-//         (result) => result.passed
-//       ).length;
-
-//       totalTests += testConfig.tests.length;
-//       passedTests += problemPassedCount;
-
-//       const acceptanceRate =
-//         (problemPassedCount / testConfig.tests.length) * 100;
-//       marks += Math.ceil(10 * (acceptanceRate / 100));
-
-//       problemFeedback += `
-//         <div class="test-results space-y-2">
-//           <p>Test Cases: ${problemPassedCount}/${testConfig.tests.length} passed</p>
-//           <ul class="list-disc pl-5">
-//       `;
-//       testResults.forEach((result, index) => {
-//         const status = result.passed ? "✅ Passed" : "❌ Failed";
-//         const errorInfo = result.passed
-//           ? ""
-//           : `<br>${result.description}<br>Expected: ${
-//               JSON.stringify(result.expected) || "N/A"
-//             }, Got: ${JSON.stringify(result.actual) || "N/A"}` +
-//             (result.error ? `<br>Error: ${result.error}` : "");
-//         problemFeedback += `
-//           <li>Test ${index + 1}: ${status}${errorInfo}</li>
-//         `;
-//       });
-//       problemFeedback += `
-//           </ul>
-//               <b>${
-//                 acceptanceRate == 100
-//                   ? "🏆 You got full marks for this problem."
-//                   : ""
-//               }</b>
-//           <b>${
-//             acceptanceRate > 0 && acceptanceRate != 100
-//               ? "❌ Not all test case is correct! ✔️ But you got partial marks for correct test cases."
-//               : ""
-//           }</b>
-//           <b>${acceptanceRate === 0 ? "❌😞 No marks!" : ""}</b>
-//         </div>
-//       </div>
-//       `;
-//       feedbacks += problemFeedback;
-
-//     }
-
-//     const submitedNum = document.getElementsByClassName(
-//       "font-weight-bold pl-2 "
-//     )[0].innerText;
-
-//     feedbacks += `<br/>
-//     <strong>Examiner Feedback:</strong> ${getFeedBack(submitedNum, marks)}
-
-//   <strong>Important Instructions:</strong>
-//     → Don't post any marks-related issues on Facebook.
-//     → Make sure to read all the feedback carefully.
-//     → If you think some mistake happen from the examiner's end, give a recheck request or join support session for help.
-//     → After recheck 2 marks will be deducted automatically. but don't worry, if your recheck reason is valid then your marks will be increased.
-//     → If your recheck reason is not valid, 2 marks will be deducted from your current marks.
-//   <br/>
-//   <strong>Let's Code_ Your Career</strong>
-//     `;
-
-//     console.log("Obtained Marks:", marks);
-//     console.log("Feedbacks:", feedbacks);
-
-//    return {marks, feedbacks};
-// }
 function clearResults() {
   document.getElementById("results").innerHTML = "";
   document.getElementById("studentCode").value = "";
@@ -623,7 +535,6 @@ function clearResults() {
 
 async function runTests(code) {
   const problems = extractProblems(code);
-
   let totalTests = 0;
   let passedTests = 0;
   let feedbacks = "";
@@ -640,6 +551,8 @@ async function runTests(code) {
       feedbacks += problemFeedback;
       continue;
     }
+
+  
 
     const testResults = await runSingleProblem(
       problemKey,
@@ -675,6 +588,8 @@ async function runTests(code) {
 
 async function runSingleProblem(problemKey, code, tests) {
   const results = [];
+
+
 
   // Collect all test variables
   const testVariables = new Set();
